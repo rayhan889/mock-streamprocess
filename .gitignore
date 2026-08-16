@@ -1,0 +1,25 @@
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+*.test
+
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+go.work
+go.work.sum
+
+.env
+
+.idea/
+.vscode/
+
+.claude/settings.local.json
