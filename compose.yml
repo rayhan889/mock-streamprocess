@@ -44,8 +44,12 @@ services:
     depends_on:
       kafka-init:
         condition: service_completed_successfully
+      sentiment-service:
+        condition: service_started
     environment:
       KAFKA_BROKER: ${KAFKA_BROKER}
+      SENTIMENT_SERVICE_HOST: ${SENTIMENT_SERVICE_HOST}
+      SENTIMENT_SERVICE_PORT: ${SENTIMENT_SERVICE_PORT}
 
   sink-service:
     build:
@@ -57,3 +61,10 @@ services:
     environment:
       KAFKA_BROKER: ${KAFKA_BROKER}
       MONGO_URI: ${MONGO_URI}
+
+  sentiment-service:
+    build:
+      context: ./sentiment-service
+      dockerfile: Dockerfile
+    expose:
+      - "50051"

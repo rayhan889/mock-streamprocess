@@ -1,0 +1,16 @@
+syntax = "proto3";
+package sentiment;
+option go_package = "github.com/rayhan889/mock-streamprocess/sentimentpb;sentimentpb";
+
+service SentimentService {
+  rpc AnalyzeSentiment (AnalyzeSentimentRequest) returns (AnalyzeSentimentResponse);
+}
+
+message AnalyzeSentimentRequest {
+  string text = 1;
+}
+
+message AnalyzeSentimentResponse {
+  string label = 1; // vader : positive, negative, neutral
+  double score = 2;
+}

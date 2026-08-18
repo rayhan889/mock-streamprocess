@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/segmentio/kafka-go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/rayhan889/mock-streamprocess/sentimentpb"
 )
 
 type RawTweet struct {
@@ -30,6 +36,8 @@ type CleanedTweet struct {
 	FullText       string `json:"full_text"`
 	CleanText string `json:"clean_text"`
 	IsNoise   bool   `json:"is_noise"`
+	SentimentLabel string  `json:"sentiment_label"`
+	SentimentScore float64 `json:"sentiment_score"`
 }
 
 var (
@@ -67,6 +75,20 @@ func main() {
 	}
 	defer writer.Close()
 
+	sentimentServiceHost := os.Getenv("SENTIMENT_SERVICE_HOST")
+	sentimentServicePort := os.Getenv("SENTIMENT_SERVICE_PORT")
+	if sentimentServiceHost == "" || sentimentServicePort == "" {
+		log.Fatal("SENTIMENT_SERVICE_HOST and SENTIMENT_SERVICE_PORT environment variables are not set")
+	}
+
+	conn, err := grpc.NewClient(fmt.Sprintf("%s:%s", sentimentServiceHost, sentimentServicePort), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to connect to sentiment service: %v", err)
+	}
+	defer conn.Close()
+
+	sentimentClient := sentimentpb.NewSentimentServiceClient(conn)
+
 	for {
 		m, err := reader.ReadMessage(context.Background())
 		if err != nil {
@@ -81,12 +103,34 @@ func main() {
 		}
 
 		cleanText, isNoise := clean(raw.FullText)
+
+		var sentimentLabel string
+		var sentimentScore float64
+
+		sentimentCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		sentimentResp, err := sentimentClient.AnalyzeSentiment(sentimentCtx, &sentimentpb.AnalyzeSentimentRequest{
+			Text: cleanText,
+		})
+		cancel()
+
+		log.Println("Execute sentiment service through gRPC")
+		log.Printf("analyzed sentiment for %s: label=%s, score=%f", raw.ConversationID, sentimentResp.Label, sentimentResp.Score)
+
+		if err != nil {
+			log.Println("sentiment analysis error:", err)
+		} else {
+			sentimentLabel = sentimentResp.Label
+			sentimentScore = sentimentResp.Score
+		}
+
 		out := CleanedTweet{
 			ConversationID: raw.ConversationID,
 			CleanText: cleanText,
 			PostedAt: raw.PostedAt,
 			IsNoise:   isNoise,
 			FullText:      raw.FullText,
+			SentimentLabel: sentimentLabel,
+			SentimentScore: sentimentScore,
 		}
 		payload, _ := json.Marshal(out)
 

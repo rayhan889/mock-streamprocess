@@ -19,6 +19,8 @@ type CleanedTweet struct {
 	FullText       string `json:"full_text"`
 	CleanText string `json:"clean_text"`
 	IsNoise   bool   `json:"is_noise"`
+	SentimentLabel string  `json:"sentiment_label"`
+	SentimentScore float64 `json:"sentiment_score"`
 }
 
 func main() {
