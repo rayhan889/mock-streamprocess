@@ -14,13 +14,13 @@ import (
 )
 
 type CleanedTweet struct {
-	ConversationID string `json:"conversation_id"`
-	PostedAt 	   string `json:"posted_at"`
-	FullText       string `json:"full_text"`
-	CleanText string `json:"clean_text"`
-	IsNoise   bool   `json:"is_noise"`
-	SentimentLabel string  `json:"sentiment_label"`
-	SentimentScore float64 `json:"sentiment_score"`
+	ConversationID string  `json:"conversation_id" bson:"conversation_id"`
+	PostedAt       string  `json:"posted_at" bson:"posted_at"`
+	FullText       string  `json:"full_text" bson:"full_text"`
+	CleanText      string  `json:"clean_text" bson:"clean_text"`
+	IsNoise        bool    `json:"is_noise" bson:"is_noise"`
+	SentimentLabel string  `json:"sentiment_label" bson:"sentiment_label"`
+	SentimentScore float64 `json:"sentiment_score" bson:"sentiment_score"`
 }
 
 func main() {
@@ -35,7 +35,7 @@ func main() {
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:               []string{broker},
-		Topic:                 "tweets.clean",
+		Topic:                 "tweets.sentiment",
 		GroupID:               "sink-service",
 		WatchPartitionChanges: true,
 	})
