@@ -23,8 +23,8 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
-        until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic tweets.raw --partitions 1 --replication-factor 1 &&
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic tweets.clean --partitions 1 --replication-factor 1;
+        until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic tweets.raw --partitions 3 --replication-factor 1 &&
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:29092 --create --if-not-exists --topic tweets.sentiment --partitions 3 --replication-factor 1;
         do echo "waiting for kafka to be ready..."; sleep 2; done
 
   extractor-service:
@@ -37,20 +37,6 @@ services:
     environment:
       KAFKA_BROKER: ${KAFKA_BROKER}
 
-  processor-service:
-    build:
-      context: .
-      dockerfile: processor-service/Dockerfile
-    depends_on:
-      kafka-init:
-        condition: service_completed_successfully
-      sentiment-service:
-        condition: service_started
-    environment:
-      KAFKA_BROKER: ${KAFKA_BROKER}
-      SENTIMENT_SERVICE_HOST: ${SENTIMENT_SERVICE_HOST}
-      SENTIMENT_SERVICE_PORT: ${SENTIMENT_SERVICE_PORT}
-
   sink-service:
     build:
       context: .
@@ -62,9 +48,75 @@ services:
       KAFKA_BROKER: ${KAFKA_BROKER}
       MONGO_URI: ${MONGO_URI}
 
-  sentiment-service:
+  spark-master:
     build:
-      context: ./sentiment-service
+      context: ./spark-sentiment-service
       dockerfile: Dockerfile
-    expose:
-      - "50051"
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+
+  spark-worker-1:
+    build:
+      context: ./spark-sentiment-service
+      dockerfile: Dockerfile
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    environment:
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2g
+    depends_on:
+      - spark-master
+
+  spark-worker-2:
+    build:
+      context: ./spark-sentiment-service
+      dockerfile: Dockerfile
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    environment:
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2g
+    depends_on:
+      - spark-master
+
+  spark-sentiment-service:
+    build:
+      context: ./spark-sentiment-service
+      dockerfile: Dockerfile
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - spark://spark-master:7077
+      - --conf
+      - spark.driver.host=spark-sentiment-service
+      - --conf
+      - spark.driver.port=7078
+      - --conf
+      - spark.driver.blockManager.port=7079
+      - --conf
+      - spark.sql.adaptive.enabled=false
+      - --py-files
+      - cleaning.py,schema.py,sentiment.py
+      - job.py
+    user: "0:0"
+    ports:
+      - "4040:4040"
+      - "7078:7078"
+      - "7079:7079"
+    volumes:
+      - spark-checkpoints:/checkpoints
+    environment:
+      KAFKA_BROKER: ${KAFKA_BROKER}
+      SPARK_MASTER_URL: spark://spark-master:7077
+      TRIGGER_INTERVAL: ${TRIGGER_INTERVAL}
+      MAX_OFFSETS_PER_TRIGGER: ${MAX_OFFSETS_PER_TRIGGER}
+      CHECKPOINT_DIR: ${CHECKPOINT_DIR}
+    restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      spark-master:
+        condition: service_started
+
+volumes:
+  spark-checkpoints:

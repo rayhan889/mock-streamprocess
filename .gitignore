@@ -25,3 +25,5 @@ go.work.sum
 .claude/settings.local.json
 
 sentiment-service/.venv/
+
+spark-sentiment-service/.venv/
